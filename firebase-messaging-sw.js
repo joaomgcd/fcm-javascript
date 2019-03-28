@@ -1,6 +1,6 @@
 self.importScripts('https://www.gstatic.com/firebasejs/5.9.1/firebase-app.js');
 self.importScripts('https://www.gstatic.com/firebasejs/5.9.1/firebase-messaging.js');
-self.importScripts('fcm.js');
+self.importScripts('/fcm.js');
 
 const broadcastChannel = new BroadcastChannelFCM();
 
@@ -23,10 +23,20 @@ const register = async (senderId, count,error) => {
 		return register(senderId,++count,error);
 	}
 }
-broadcastChannel.onTokenRequested(async senderId=>{
+const getTokenAndReport = async senderId =>{
+    console.log("SW registering and Reporting", senderId);
 	const token = await register(senderId);
 	broadcastChannel.reportToken(senderId,token);
+	return token;
+}
+broadcastChannel.onTokenRequested(async senderId=>{
+	await getTokenAndReport(senderId);
 });
 fcm.onMessage.addListener(async payload=>{
 	broadcastChannel.reportMessage(payload);
 });
+self.addEventListener('message', async event => {
+	const senderId = event.data;
+	await getTokenAndReport(senderId);
+});
+broadcastChannel.reportWorkerRunning();

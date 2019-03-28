@@ -17,6 +17,14 @@ class FCM {
 		return true;
 	}
 	async register(senderId){
+		const wakeWorkerToRegisterSenderId = senderId =>{
+			this.broadcastChannel.requestToken(senderId);
+			if(navigator.serviceWorker.controller){
+				navigator.serviceWorker.controller.postMessage(senderId);
+				return true;			
+			}
+			return false;
+		};
 		const hasPermissions = await this.requestPermissions();
 		if(!hasPermissions) return null;
 
@@ -37,30 +45,38 @@ class FCM {
 		};
 		if(!isInServiceWorker){
 			await messaging.onMessage(handleMessage);
+			this.broadcastChannel.onMessageReported(handleMessage);
 		}
 		if(isInServiceWorker){
 			await messaging.setBackgroundMessageHandler(handleMessage);
 		}		
 		if(!alreadyInited && !isInServiceWorker){
-			const existingWorkerCount = (await navigator.serviceWorker.getRegistrations()).length;
+			const existingWorkers = await navigator.serviceWorker.getRegistrations();
+			const existingWorkerCount = existingWorkers.length;
+			var existingWorker = null;
 			if(existingWorkerCount == 0){
 				console.log("Registering FCM worker");
-				const registration = await navigator.serviceWorker.register(`fcm-javascript/firebase-messaging-sw.js`);
-				messaging.useServiceWorker(registration);	
+				existingWorker = await navigator.serviceWorker.register(`/firebase-messaging-sw.js`);
+				messaging.useServiceWorker(existingWorker);	
+			}else{
+				existingWorker = existingWorkers[0];
 			}
-			this.broadcastChannel.onMessageReported(handleMessage);
+			this.broadcastChannel.onWorkerRunning(()=>{
+				wakeWorkerToRegisterSenderId(senderId);
+			});
 		}
 		if(isInServiceWorker){
 			return await messaging.getToken();
 		}else{
-			return await new Promise((resolve,reject) => {
+			const result = new Promise((resolve,reject) => {
 				this.broadcastChannel.onTokenReported(payload=>{
 					if(payload.senderId != senderId) return;
 
 					resolve(payload.token);
 				})
-				this.broadcastChannel.requestToken(senderId);
+				const canWakeUp = wakeWorkerToRegisterSenderId(senderId);
 			});
+			return result;
 		}
 	}
 	get onMessage(){
@@ -88,6 +104,8 @@ class BroadcastChannelFCM extends BroadcastChannel{
 
 		BroadcastChannelFCM.ACTION_REPORT_MESSAGE = 'report-message';
 
+		BroadcastChannelFCM.ACTION_WORKER_RUNNING = 'worker-running';
+
 		BroadcastChannelFCM.EXTRA_SENDER_ID = 'sender-id';
 		BroadcastChannelFCM.EXTRA_TOKEN = 'token';
 		BroadcastChannelFCM.EXTRA_MESSAGE = 'message';
@@ -102,6 +120,8 @@ class BroadcastChannelFCM extends BroadcastChannel{
 				this.doCallback(this.tokenReportedCallback, {"senderId":data[BroadcastChannelFCM.EXTRA_SENDER_ID],"token":data[BroadcastChannelFCM.EXTRA_TOKEN]});
 			}else if(data[BroadcastChannelFCM.ACTION_REPORT_MESSAGE]){
 				this.doCallback(this.messageReportedCallback, data[BroadcastChannelFCM.EXTRA_MESSAGE]);
+			}else if(data[BroadcastChannelFCM.ACTION_WORKER_RUNNING]){
+				this.doCallback(this.workerRunningCallback);
 			}
 		});
 	}
@@ -149,5 +169,14 @@ class BroadcastChannelFCM extends BroadcastChannel{
 	}
 	onMessageReported(callback){
 		this.messageReportedCallback = callback;
+	}
+
+	reportWorkerRunning(){
+		this.postFcmMessage(message=>{
+			message[BroadcastChannelFCM.ACTION_WORKER_RUNNING] = true;
+		});
+	}
+	onWorkerRunning(callback){
+		this.workerRunningCallback = callback;
 	}
 }

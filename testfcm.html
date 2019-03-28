@@ -3,21 +3,22 @@
 <head>
 	<script src="https://www.gstatic.com/firebasejs/5.9.1/firebase-app.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/5.9.1/firebase-messaging.js"></script>
-	<script src="fcm-javascript/fcm.js"></script>
+	<script src="/fcm.js"></script>
 	<script type="text/javascript">
-		const YOUR_SENDER_ID = "12345678"
+		const YOUR_SENDER_ID = "SENDER_ID"
 		const fcm = new FCM();
 		const init = async () => {
-			const token = await fcm.register(YOUR_SENDER_ID);
-			console.log("Got token in page",token);
+			fcm.register(YOUR_SENDER_ID).then(token=> console.log("Got token in page",token));
+			
 			fcm.onMessage.addListener(payload=>{
 				console.log("New Message!",payload);
+				document.querySelector("#message").innerHTML = payload.data.message;
 			});
 		};
 		init();
 	</script>
 </head>
 <body>
-
+	<div id="message"></div>
 </body>
 </html>
