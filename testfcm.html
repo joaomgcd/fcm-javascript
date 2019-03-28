@@ -8,7 +8,10 @@
 		const YOUR_SENDER_ID = "SENDER_ID"
 		const fcm = new FCM();
 		const init = async () => {
-			fcm.register(YOUR_SENDER_ID).then(token=> console.log("Got token in page",token));
+			fcm.register(YOUR_SENDER_ID).then(token=> {
+				console.log("Got token in page",token);
+				document.querySelector("#token").innerHTML = token;
+			});
 			
 			fcm.onMessage.addListener(payload=>{
 				console.log("New Message!",payload);
@@ -19,6 +22,10 @@
 	</script>
 </head>
 <body>
+	<div>
+		<div>Send a message to:</div>
+		<pre id="token"></pre>
+	</div>
 	<div id="message"></div>
 </body>
 </html>
