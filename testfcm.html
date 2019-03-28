@@ -4,28 +4,56 @@
 	<script src="https://www.gstatic.com/firebasejs/5.9.1/firebase-app.js"></script>
 	<script src="https://www.gstatic.com/firebasejs/5.9.1/firebase-messaging.js"></script>
 	<script src="/fcm.js"></script>
+	<script src="/fcm-client.js"></script>
 	<script type="text/javascript">
-		const YOUR_SENDER_ID = "SENDER_ID"
-		const fcm = new FCM();
-		const init = async () => {
-			fcm.register(YOUR_SENDER_ID).then(token=> {
+		const fcmClient = new FCMClientTest();
+		var fcmToken = null;
+		fcmClient.initPage(
+			token=> {
 				console.log("Got token in page",token);
 				document.querySelector("#token").innerHTML = token;
-			});
-			
-			fcm.onMessage.addListener(payload=>{
+				fcmToken = token;
+			},
+			payload=>{
 				console.log("New Message!",payload);
 				document.querySelector("#message").innerHTML = payload.data.message;
-			});
-		};
-		init();
+			}
+		)
+		const sendTestMessage = async () => {
+			const messageTest = document.querySelector("#testmessage").value;
+			const options = { 
+				method: 'POST',
+				headers: {
+					'Accept': 'application/json',
+					'Content-Type': 'application/json',
+					'Authorization': 'key=AIzaSyDL1u90dzLaO971O6WET9URGFWtmWg5uJE'
+				},
+				body: JSON.stringify(
+					{
+					"to" : fcmToken,
+					"priority" : "high",
+					"data" : {"message":messageTest}
+					}
+				)
+			}
+			const result = await fetch("https://fcm.googleapis.com/fcm/send",options);
+			const response = await result.json();
+			document.querySelector("#messagesendresult").innerHTML = JSON.stringify(response,3);
+			console.log("Push response", response);
+		}
 	</script>
 </head>
 <body>
 	<div>
 		<div>Send a message to:</div>
-		<pre id="token"></pre>
+		<pre id="token"></pre>		
+		<div>
+			<input type="text" id="testmessage">
+			<input type="button" id="test" value="Send Test" onclick="sendTestMessage();" />
+			<div>Message Send Result: </div><pre id="messagesendresult"></pre>
+		</div>
 	</div>
+	<div>Received Message:</div>
 	<div id="message"></div>
 </body>
 </html>

@@ -1,8 +1,8 @@
+
 class FCM {
 	constructor(){
-		this.messageHandler = new MessageHandler();
+		//this.messageHandler = new MessageHandler();
 		this.broadcastChannel = new BroadcastChannelFCM();
-		//this.scriptLoader = new ScriptLoader();
 		this.isInServiceWorker = navigator.serviceWorker ? false : true;
 		if(!FCM.firebaseApp){
 			FCM.firebaseApp = {};
@@ -16,6 +16,18 @@ class FCM {
 
 		return true;
 	}
+	getFirebaseMessaging(senderId){
+		var existingApp = FCM.firebaseApp[senderId];
+		const alreadyInited =  existingApp ? true : false;
+		if(!alreadyInited){
+			existingApp = firebase.initializeApp({
+			  "messagingSenderId": senderId
+			},senderId)
+			FCM.firebaseApp[senderId] = existingApp;				
+		}
+		const messaging = existingApp.messaging();
+		return messaging;
+	}
 	async register(senderId){
 		const wakeWorkerToRegisterSenderId = senderId =>{
 			this.broadcastChannel.requestToken(senderId);
@@ -28,29 +40,22 @@ class FCM {
 		const hasPermissions = await this.requestPermissions();
 		if(!hasPermissions) return null;
 
+		const messaging = this.getFirebaseMessaging(senderId);
 		const isInServiceWorker = this.isInServiceWorker;
-		var existingApp = FCM.firebaseApp[senderId];
-		const alreadyInited =  existingApp ? true : false;
-		if(!alreadyInited){
-			existingApp = firebase.initializeApp({
-			  "messagingSenderId": senderId
-			},senderId)
-			FCM.firebaseApp[senderId] = existingApp;				
-		}
-		const messaging = existingApp.messaging();
+		
 		const handleMessage = async payload => {
 			if(!this.messageHandler) return;
 
 			this.messageHandler.handle(payload);			
 		};
 		if(!isInServiceWorker){
-			await messaging.onMessage(handleMessage);
+			messaging.onMessage(handleMessage);
 			this.broadcastChannel.onMessageReported(handleMessage);
 		}
 		if(isInServiceWorker){
-			await messaging.setBackgroundMessageHandler(handleMessage);
+			messaging.setBackgroundMessageHandler(handleMessage);
 		}		
-		if(!alreadyInited && !isInServiceWorker){
+		if(!isInServiceWorker){
 			const existingWorkers = await navigator.serviceWorker.getRegistrations();
 			const existingWorkerCount = existingWorkers.length;
 			var existingWorker = null;
@@ -79,20 +84,69 @@ class FCM {
 			return result;
 		}
 	}
-	get onMessage(){
-		 return this.messageHandler;
+	onMessage(senderId, callback){
+		if(this.isInServiceWorker){
+			this.getFirebaseMessaging(senderId).setBackgroundMessageHandler(callback);
+		}
+		this.messageHandler = {"handle":callback}
+
 	}
 }
 
-class MessageHandler{
-	constructor(){
-		this.listeners = [];
+class FCMClient{
+	constructor(senderIds){
+		this.senderIds = senderIds;
+		this.fcm = new FCM();
 	}
-	addListener(listener){
-		this.listeners.push(listener);
+	async registerServiceWorker(senderId, count,error){
+		if(count>=3){
+			console.error(`Giving up registration!!`,error);
+			return null;
+		}
+		if(count > 0){
+			console.log(`Retrying register ${count}...`)
+		}
+		try{
+			const token = await this.fcm.register(senderId);		
+			return token;
+		}catch(error){
+			if(!count){
+				count = 0;
+			}
+			return this.registerServiceWorker(senderId,++count,error);
+		}
 	}
-	handle(payload){
-		this.listeners.forEach(listener=>listener(payload));
+	async getTokenAndReport(senderId){
+	    console.log("SW registering and Reporting", senderId);
+		const token = await this.registerServiceWorker(senderId);
+		this.fcm.broadcastChannel.reportToken(senderId,token);
+		return token;
+	}
+	initServiceWorker(serviceWorker, messageCallback){
+		this.fcm.broadcastChannel.onTokenRequested(async senderId=>{
+			await this.getTokenAndReport(senderId);
+		});
+		for(var senderId of this.senderIds){	
+			this.fcm.onMessage(senderId, async payload=>{
+				this.handleBackgroundMessage(serviceWorker, payload);
+				this.fcm.broadcastChannel.reportMessage(payload);
+			});
+		}
+		serviceWorker.addEventListener('message', async event => {
+			const senderId = event.data;
+			await this.getTokenAndReport(senderId);
+		});
+		this.fcm.broadcastChannel.reportWorkerRunning();
+	}
+	initPage(tokenCallback,messageCallback){
+		for(var senderId of this.senderIds){
+			this.fcm.register(senderId).then(token=> {
+				tokenCallback(token);
+			});			
+			this.fcm.onMessage(senderId, payload=>{
+				messageCallback(payload);
+			});	
+		}
 	}
 }
 
