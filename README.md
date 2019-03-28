@@ -9,3 +9,6 @@ To get started:
 - edit your Sender ID
 - Upload the page to a host that supports HTTPS
 - send the message to the token and the page should get it!
+
+## Important note
+You have to place both script files on the root of your server or else it won't work.
