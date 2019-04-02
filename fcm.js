@@ -11,6 +11,8 @@ class FCM {
 	async requestPermissions(){
 		if(this.isInServiceWorker) return true;
 		
+		if(!Notification.requestPermission) return true;
+		
 		const result = await Notification.requestPermission()
 		if (result === 'denied' || result === 'default') return false
 
