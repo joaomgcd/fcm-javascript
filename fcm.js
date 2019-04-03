@@ -12,7 +12,7 @@ class FCM {
 		if(this.isInServiceWorker) return true;
 		
 		if(!Notification.requestPermission) return true;
-		
+
 		const result = await Notification.requestPermission()
 		if (result === 'denied' || result === 'default') return false
 
@@ -149,6 +149,20 @@ class FCMClient{
 				messageCallback(payload);
 			});	
 		}
+	}	
+	async onMessage(callback){
+		this.senderIds.forEach(senderId=>this.fcm.onMessage(senderId, callback));
+	}
+	async getTokens(){
+		const result = [];
+		for(const senderId of this.senderIds){
+			const token = await this.fcm.register(senderId);
+			result.push({"token":token,"senderId":senderId});
+		}
+		return result;
+	}
+	async getToken(senderId){
+		return await this.fcm.register(senderId);
 	}
 }
 
